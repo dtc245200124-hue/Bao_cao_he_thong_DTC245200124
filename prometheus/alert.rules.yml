@@ -1,0 +1,32 @@
+groups:
+  - name: webapp_system_alerts
+    rules:
+      # 1. Cảnh báo khi WebApp container bị sập
+      - alert: WebAppDown
+        expr: up{job="webapp"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Dịch vụ WebApp không phản hồi (Service DOWN)"
+          description: "Container WebApp đã ngừng hoạt động hơn 30 giây trên hệ thống."
+
+      # 2. Cảnh báo khi phát sinh lỗi HTTP 5xx (Lỗi máy chủ nội bộ)
+      - alert: HighHttp5xxRate
+        expr: sum(rate(flask_http_request_total{status=~"5.."}[1m])) > 0
+        for: 10s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Tỷ lệ lỗi HTTP 5xx tăng bất thường (Server Error Alert)"
+          description: "Phát hiện có request gây lỗi 500/5xx trên WebApp trong 1 phút qua. Cần kiểm tra log Loki ngay!"
+
+      # 3. Cảnh báo khi lỗi HTTP 404 tăng đột biến (Nghi vấn dò quét URL bất thường)
+      - alert: HighHttp404Rate
+        expr: sum(rate(flask_http_request_total{status="404"}[1m])) > 2
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Phát hiện dấu hiệu dò quét URL (High 404 rate)"
+          description: "Số lượng request lỗi 404 vượt quá ngưỡng 2 req/giây trên WebApp."

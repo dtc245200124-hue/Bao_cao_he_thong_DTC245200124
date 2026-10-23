@@ -72,9 +72,51 @@ Tất cả 7 containers phải hiển thị trạng thái `running` (Up) hoặc 
 - **Kiểm tra tình trạng sống (Healthcheck):** [http://localhost:8080/health](http://localhost:8080/health)
 - **Kiểm tra kết nối Database:** [http://localhost:8080/db-check](http://localhost:8080/db-check)
 - **Prometheus Metrics thô:** [http://localhost:8080/metrics](http://localhost:8080/metrics)
-- **Giao diện Prometheus Web:** [http://localhost:9090](http://localhost:9090) (Xem mục *Status -> Targets*)
-- **Giao diện Grafana Dashboard:** [http://localhost:3000](http://localhost:3000) (Tài khoản mặc định: `admin` / `admin` hoặc tự động đăng nhập)
+- **Giao diện Prometheus Web:** [http://localhost:9090](http://localhost:9090) (Status -> Targets)
+- **Giao diện Cảnh báo Prometheus (Alerts):** [http://localhost:9090/alerts](http://localhost:9090/alerts)
+- **Giao diện Grafana Dashboard:** [http://localhost:3000](http://localhost:3000) (Tài khoản: `admin` / `admin`)
 - **Kiểm tra Loki Ready:** [http://localhost:3100/ready](http://localhost:3100/ready)
+
+---
+
+## 🔔 3.2. Cấu hình Hệ thống Cảnh Báo (Prometheus Alerting Rules)
+
+File cấu hình cảnh báo `prometheus/alert.rules.yml` được tích hợp tự động vào Prometheus nhằm phát hiện và cảnh báo sớm các bất thường:
+
+```yaml
+groups:
+  - name: webapp_system_alerts
+    rules:
+      # 1. Cảnh báo sập dịch vụ WebApp
+      - alert: WebAppDown
+        expr: up{job="webapp"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Dịch vụ WebApp không phản hồi (Service DOWN)"
+          description: "Container WebApp đã ngừng hoạt động hơn 30 giây."
+
+      # 2. Cảnh báo tỷ lệ lỗi HTTP 5xx tăng bất thường
+      - alert: HighHttp5xxRate
+        expr: sum(rate(flask_http_request_total{status=~"5.."}[1m])) > 0
+        for: 10s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Tỷ lệ lỗi HTTP 5xx tăng bất thường (Server Error Alert)"
+          description: "Phát hiện request gây lỗi 500/5xx trên WebApp. Cần kiểm tra log Loki ngay!"
+
+      # 3. Cảnh báo quét URL / Tấn công dò đường dẫn (HTTP 404)
+      - alert: HighHttp404Rate
+        expr: sum(rate(flask_http_request_total{status="404"}[1m])) > 2
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Phát hiện dấu hiệu dò quét URL (High 404 rate)"
+          description: "Số lượng request lỗi 404 vượt quá ngưỡng 2 req/giây trên WebApp."
+```
 
 ---
 
@@ -100,6 +142,11 @@ Tất cả 7 containers phải hiển thị trạng thái `running` (Up) hoặc 
    [ERROR] [webapp] CANH BAO: Mot loi nghiem trong gia lap vua duoc kich hoat tren he thong (HTTP 500 Internal Server Error)!
    ```
    *Minh chứng khả năng phát hiện và truy vết sự cố nhanh chóng.*
+
+### Kịch bản 4: Kiểm thử Hệ thống Cảnh báo Tự động (Alert Evaluation)
+1. Mở tab: **[http://localhost:9090/alerts](http://localhost:9090/alerts)** trên Prometheus. Ban đầu các Rule đều ở trạng thái màu xanh **`Inactive`** (Bình thường).
+2. Tại WebApp, bấm liên tiếp nút **"⚠️ Gây Lỗi 500 (Test Alert)"**.
+3. Tại trang Alerts của Prometheus, Rule **`HighHttp5xxRate`** sẽ chuyển trạng thái sang **`Pending`** rồi **`Firing`** (Màu đỏ cảnh báo), chứng minh cơ chế cảnh báo tự động hoạt động chính xác!
 
 ---
 
